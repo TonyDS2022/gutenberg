@@ -72,3 +72,42 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  /* Annotation highlight mark styling */
+  mark[data-annotation-id] {
+    border-radius: 2px;
+    padding: 0 1px;
+    cursor: pointer;
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+    /* Preserve text selection */
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  /* Hover state - subtle emphasis */
+  mark[data-annotation-id]:hover {
+    filter: brightness(0.92);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Dark theme adjustments for visibility */
+  .dark mark[data-annotation-id] {
+    filter: brightness(1.15) saturate(0.85);
+  }
+
+  .dark mark[data-annotation-id]:hover {
+    filter: brightness(1.25) saturate(0.85);
+    box-shadow: 0 1px 3px rgba(255, 255, 255, 0.1);
+  }
+
+  /* Sepia theme adjustments for warm tones */
+  .sepia mark[data-annotation-id] {
+    filter: sepia(0.15);
+  }
+
+  .sepia mark[data-annotation-id]:hover {
+    filter: sepia(0.15) brightness(0.92);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+}
