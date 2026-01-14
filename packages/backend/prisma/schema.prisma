@@ -1,0 +1,150 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  username      String          @unique
+  passwordHash  String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  annotations   Annotation[]
+  bookmarks     Bookmark[]
+  readingSessions ReadingSession[]
+
+  @@map("users")
+}
+
+model Book {
+  id            Int             @id  // Project Gutenberg ID
+  title         String
+  authors       Json            // Array of author objects {name, birth_year, death_year}
+  subjects      Json?           // Array of subjects/topics
+  languages     String[]
+  formats       Json            // Available download formats {mime_type: url}
+  downloadCount Int?
+  coverImage    String?         // URL to cover image if available
+  metadata      Json?           // Full Gutendex response for additional data
+
+  // Cached content
+  content       String?         @db.Text  // Cached book content
+  contentFormat String?         // 'text' or 'html'
+  contentLength Int?            // Length of content in characters
+  contentCachedAt DateTime?     // When content was cached
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  annotations   Annotation[]
+  bookmarks     Bookmark[]
+  readingSessions ReadingSession[]
+
+  @@map("books")
+  @@index([title])
+  @@index([languages])
+}
+
+model Annotation {
+  id            String          @id @default(uuid())
+  userId        String
+  bookId        Int
+
+  // Text selection info
+  selectedText  String          @db.Text
+  startOffset   Int             // Character offset in book
+  endOffset     Int
+  startNode     String?         // DOM node path (for HTML content)
+  endNode       String?
+  context       String?         @db.Text // Surrounding text for fuzzy matching
+
+  // Annotation content
+  note          String?         @db.Text
+  color         String          @default("#ffeb3b")  // Highlight color
+  tags          String[]        @default([])
+
+  // Metadata
+  chapter       String?         // Chapter/section identifier
+  pageNumber    Int?            // Approximate page number
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book          Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@map("annotations")
+  @@index([userId, bookId])
+  @@index([bookId])
+  @@index([userId])
+}
+
+model Bookmark {
+  id            String          @id @default(uuid())
+  userId        String
+  bookId        Int
+
+  // Reading position
+  position      Int             // Character offset or page number
+  positionType  String          @default("offset")  // "offset" or "page"
+  chapter       String?         // Current chapter name
+  totalLength   Int?            // Total book length in characters
+  progressPercent Float         @default(0) // Reading progress percentage
+
+  // Metadata
+  isFavorite    Boolean         @default(false)
+  lastReadAt    DateTime        @default(now())
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book          Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@map("bookmarks")
+  @@unique([userId, bookId])  // One bookmark per user per book
+  @@index([userId])
+  @@index([lastReadAt])
+}
+
+model ReadingSession {
+  id            String          @id @default(uuid())
+  userId        String
+  bookId        Int
+
+  // Session data
+  startTime     DateTime        @default(now())
+  endTime       DateTime?
+  durationMs    Int?            // Duration in milliseconds
+
+  // Progress tracking
+  startPosition Int
+  endPosition   Int?
+  charactersRead Int           @default(0)
+  pagesRead     Int             @default(0)
+  completed     Boolean         @default(false)  // Did user finish the book?
+
+  // Metadata
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  // Relations
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book          Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@map("reading_sessions")
+  @@index([userId, bookId])
+  @@index([userId, startTime])
+  @@index([userId, createdAt])
+}
