@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { dictionaryApi, DictionaryLookupResult } from '../../api/dictionary';
 import type { TextSelection } from '../../hooks/useTextSelection';
 
 interface AnnotationPopupProps {
   selection: TextSelection | null;
-  onSave: (note: string, color: string) => void;
+  onSave: (note: string, color: string, tags?: string[]) => void;
   onCancel: () => void;
 }
 
@@ -17,11 +18,25 @@ const COLORS = [
   { name: 'Orange', value: '#ff9800' },
 ];
 
+// Special color for dictionary definitions
+const DICTIONARY_COLOR = '#9c27b0'; // Purple
+
 export const AnnotationPopup = ({ selection, onSave, onCancel }: AnnotationPopupProps) => {
   const [note, setNote] = useState('');
   const [selectedColor, setSelectedColor] = useState(COLORS[0].value);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const popupRef = useRef<HTMLDivElement>(null);
+
+  // Dictionary lookup state
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [lookupResult, setLookupResult] = useState<DictionaryLookupResult | null>(null);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  // Reset lookup state when selection changes
+  useEffect(() => {
+    setLookupResult(null);
+    setLookupError(null);
+  }, [selection?.text]);
 
   useEffect(() => {
     if (!selection || !selection.clientRect || !popupRef.current) return;
@@ -49,8 +64,43 @@ export const AnnotationPopup = ({ selection, onSave, onCancel }: AnnotationPopup
     setPosition({ top, left });
   }, [selection]);
 
+  const handleLookup = async () => {
+    if (!selection?.text) return;
+
+    setIsLookingUp(true);
+    setLookupError(null);
+    setLookupResult(null);
+
+    try {
+      const result = await dictionaryApi.lookup(selection.text);
+      setLookupResult(result);
+
+      if (result.success && result.definitions.length > 0) {
+        // Format definition for note field
+        const def = result.definitions[0];
+        let formattedNote = `${def.partOfSpeech}: ${def.definition}`;
+        if (def.phonetic) {
+          formattedNote = `/${def.phonetic}/ - ${formattedNote}`;
+        }
+        if (def.example) {
+          formattedNote += `\nExample: "${def.example}"`;
+        }
+        setNote(formattedNote);
+        setSelectedColor(DICTIONARY_COLOR);
+      } else {
+        setLookupError(result.error || 'No definition found');
+      }
+    } catch (error: any) {
+      setLookupError(error.response?.data?.error || 'Failed to look up word');
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
   const handleSave = () => {
-    onSave(note, selectedColor);
+    // Add 'dictionary' tag if this was a successful lookup
+    const tags = lookupResult?.success ? ['dictionary'] : undefined;
+    onSave(note, selectedColor, tags);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -78,9 +128,45 @@ export const AnnotationPopup = ({ selection, onSave, onCancel }: AnnotationPopup
           <p className="text-sm italic line-clamp-2">"{selection.text}"</p>
         </div>
 
+        {/* Dictionary Lookup Button */}
+        <div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={handleLookup}
+            disabled={isLookingUp || !selection?.text}
+            className="w-full"
+          >
+            {isLookingUp ? 'Looking up...' : 'Look up in Dictionary'}
+          </Button>
+        </div>
+
+        {/* Dictionary Definition Result */}
+        {lookupResult?.success && lookupResult.definitions.length > 0 && (
+          <div className="bg-muted p-2 rounded text-sm">
+            <p className="font-medium text-xs text-muted-foreground mb-1">
+              Definition ({lookupResult.definitions[0].source})
+            </p>
+            <p className="text-foreground">{lookupResult.definitions[0].definition}</p>
+            {lookupResult.definitions[0].phonetic && (
+              <p className="text-xs text-muted-foreground mt-1">
+                /{lookupResult.definitions[0].phonetic}/
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Lookup Error */}
+        {lookupError && (
+          <div className="bg-destructive/10 text-destructive p-2 rounded text-sm">
+            {lookupError}
+          </div>
+        )}
+
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1 block">
-            Note (optional)
+            Note {lookupResult?.success ? '(from definition)' : '(optional)'}
           </label>
           <Input
             type="text"
@@ -111,14 +197,28 @@ export const AnnotationPopup = ({ selection, onSave, onCancel }: AnnotationPopup
                 aria-label={color.name}
               />
             ))}
+            {/* Dictionary color (shown when lookup is successful) */}
+            {lookupResult?.success && (
+              <button
+                onClick={() => setSelectedColor(DICTIONARY_COLOR)}
+                className={`w-8 h-8 rounded-full border-2 transition-all ${
+                  selectedColor === DICTIONARY_COLOR
+                    ? 'border-primary scale-110'
+                    : 'border-border hover:scale-105'
+                }`}
+                style={{ backgroundColor: DICTIONARY_COLOR }}
+                title="Dictionary"
+                aria-label="Dictionary"
+              />
+            )}
           </div>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button size="sm" onClick={handleSave} className="flex-1">
-            Save Highlight
+          <Button type="button" size="sm" onClick={handleSave} className="flex-1">
+            {lookupResult?.success ? 'Save Definition' : 'Save Highlight'}
           </Button>
-          <Button size="sm" variant="outline" onClick={onCancel}>
+          <Button type="button" size="sm" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
         </div>

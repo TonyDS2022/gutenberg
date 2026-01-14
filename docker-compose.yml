@@ -45,6 +45,10 @@ services:
       # Gutendex API
       GUTENDEX_API_URL: ${GUTENDEX_API_URL:-https://gutendex.com}
 
+      # Dictionary API
+      MERRIAM_WEBSTER_API_KEY: ${MERRIAM_WEBSTER_API_KEY:-}
+      DICTIONARY_PROVIDER: ${DICTIONARY_PROVIDER:-merriam-webster}
+
       # Frontend configuration
       VITE_API_URL: ${VITE_API_URL:-http://localhost:5001/api}
     ports:

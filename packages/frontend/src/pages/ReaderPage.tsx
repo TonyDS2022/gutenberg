@@ -233,7 +233,7 @@ export const ReaderPage = () => {
     }
   };
 
-  const handleSaveAnnotation = async (note: string, color: string) => {
+  const handleSaveAnnotation = async (note: string, color: string, tags?: string[]) => {
     if (!bookId || !selection) return;
 
     try {
@@ -244,6 +244,7 @@ export const ReaderPage = () => {
         endOffset: selection.endOffset,
         note: note || undefined,
         color,
+        tags: tags || [],
       });
 
       setAnnotations([...annotations, newAnnotation]);

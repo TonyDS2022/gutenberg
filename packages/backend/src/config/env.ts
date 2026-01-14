@@ -8,6 +8,9 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('7d'),
   CORS_ORIGIN: z.string().url().default('http://localhost:5173'),
   GUTENDEX_API_URL: z.string().url().default('https://gutendex.com'),
+  // Dictionary API configuration
+  MERRIAM_WEBSTER_API_KEY: z.string().optional(),
+  DICTIONARY_PROVIDER: z.string().default('merriam-webster'),
 });
 
 const parseEnv = () => {

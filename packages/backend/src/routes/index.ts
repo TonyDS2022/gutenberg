@@ -5,6 +5,7 @@ import bookmarksRoutes from './bookmarks.routes';
 import annotationsRoutes from './annotations.routes';
 import sessionsRoutes from './sessions.routes';
 import statsRoutes from './stats.routes';
+import dictionaryRoutes from './dictionary.routes';
 
 const router = Router();
 
@@ -15,6 +16,7 @@ router.use('/bookmarks', bookmarksRoutes);
 router.use('/annotations', annotationsRoutes);
 router.use('/sessions', sessionsRoutes);
 router.use('/stats', statsRoutes);
+router.use('/dictionary', dictionaryRoutes);
 
 // API info endpoint
 router.get('/', (req, res) => {
@@ -59,6 +61,10 @@ router.get('/', (req, res) => {
         summary: 'GET /api/stats/summary',
         time: 'GET /api/stats/time?period=week',
         books: 'GET /api/stats/books?limit=10',
+      },
+      dictionary: {
+        lookup: 'GET /api/dictionary/:word',
+        providers: 'GET /api/dictionary',
       },
     },
   });
