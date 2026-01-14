@@ -8,16 +8,16 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:frontend": "npm run dev --workspace=frontend",
-    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=@gutenberg-reader/frontend",
+    "dev:backend": "npm run dev --workspace=@gutenberg-reader/backend",
     "build": "npm run build --workspaces --if-present",
-    "build:frontend": "npm run build --workspace=frontend",
-    "build:backend": "npm run build --workspace=backend",
+    "build:frontend": "npm run build --workspace=@gutenberg-reader/frontend",
+    "build:backend": "npm run build --workspace=@gutenberg-reader/backend",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "db:migrate": "npm run migrate:dev --workspace=backend",
-    "db:generate": "npm run generate --workspace=backend",
-    "db:studio": "npm run studio --workspace=backend"
+    "db:migrate": "npm run migrate:dev --workspace=@gutenberg-reader/backend",
+    "db:generate": "npm run generate --workspace=@gutenberg-reader/backend",
+    "db:studio": "npm run studio --workspace=@gutenberg-reader/backend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

@@ -6,9 +6,9 @@ services:
     container_name: gutenberg-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: gutenberg
-      POSTGRES_PASSWORD: gutenberg_dev_password
-      POSTGRES_DB: gutenberg
+      POSTGRES_USER: ${POSTGRES_USER:-gutenberg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gutenberg_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gutenberg}
     ports:
       - "5432:5432"
     volumes:
@@ -18,7 +18,55 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - gutenberg-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: gutenberg-app
+    restart: unless-stopped
+    environment:
+      # Node environment
+      NODE_ENV: ${NODE_ENV:-development}
+
+      # Backend configuration
+      PORT: ${BACKEND_PORT:-5001}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gutenberg}:${POSTGRES_PASSWORD:-gutenberg_dev_password}@postgres:5432/${POSTGRES_DB:-gutenberg}
+
+      # JWT Authentication
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-minimum-32-characters}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+
+      # Gutendex API
+      GUTENDEX_API_URL: ${GUTENDEX_API_URL:-https://gutendex.com}
+
+      # Frontend configuration
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5001/api}
+    ports:
+      - "${BACKEND_PORT:-5001}:${BACKEND_PORT:-5001}"
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/packages/backend/node_modules
+      - /app/packages/frontend/node_modules
+      - /app/packages/shared/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gutenberg-network
+    command: sh -c "npm run db:migrate && npm run dev"
 
 volumes:
   postgres_data:
     driver: local
+
+networks:
+  gutenberg-network:
+    driver: bridge

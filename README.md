@@ -31,30 +31,112 @@ A modern web application for reading public domain literature from Project Guten
 
 ## Prerequisites
 
-- Node.js 20+
-- npm 10+
-- Docker and Docker Compose (for PostgreSQL)
+- **Option 1 (Docker - Recommended)**: Docker and Docker Compose
+- **Option 2 (Local)**: Node.js 20+, npm 10+, and Docker Compose (for PostgreSQL only)
 
 ## Getting Started
 
-### 1. Install Dependencies
+### Option 1: Docker Development Environment (Recommended)
+
+The easiest way to get started is using Docker, which containerizes the entire development environment with all dependencies and environment variables pre-configured.
+
+#### 1. Start the Application
+
+```bash
+# Start all services (frontend, backend, and database)
+docker-compose up --build
+
+# Or run in detached mode
+docker-compose up -d --build
+```
+
+#### 2. Access the Application
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:5001/api
+- Health Check: http://localhost:5001/health
+- Database: localhost:5432
+
+#### 3. View Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f app
+docker-compose logs -f postgres
+```
+
+#### 4. Stop the Application
+
+```bash
+# Stop services
+docker-compose down
+
+# Stop and remove volumes (resets database)
+docker-compose down -v
+```
+
+#### Environment Configuration
+
+All environment variables are defined in the root `.env` file:
+
+```bash
+# Environment
+NODE_ENV=development
+
+# Database Configuration
+POSTGRES_USER=gutenberg
+POSTGRES_PASSWORD=gutenberg_dev_password
+POSTGRES_DB=gutenberg
+
+# Backend Server Configuration
+BACKEND_PORT=5001
+
+# Frontend Configuration
+FRONTEND_PORT=5173
+
+# JWT Authentication
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production-minimum-32-characters
+JWT_EXPIRES_IN=7d
+
+# CORS
+CORS_ORIGIN=http://localhost:5173
+
+# Gutendex API
+GUTENDEX_API_URL=https://gutendex.com
+
+# API URL for frontend
+VITE_API_URL=http://localhost:5001/api
+```
+
+You can modify these values in `.env` to customize your development environment without changing docker-compose.yml.
+
+---
+
+### Option 2: Local Development (Without Docker App Container)
+
+If you prefer to run the application locally outside of Docker (useful for debugging):
+
+#### 1. Install Dependencies
 
 ```bash
 # Install all dependencies for all packages
 npm install
 ```
 
-### 2. Start PostgreSQL Database
+#### 2. Start PostgreSQL Database
 
 ```bash
 # Start PostgreSQL using Docker Compose
-docker-compose up -d
+docker-compose up -d postgres
 
 # Verify database is running
 docker-compose ps
 ```
 
-### 3. Set Up Backend
+#### 3. Set Up Backend
 
 ```bash
 # Generate Prisma client
@@ -66,7 +148,19 @@ npm run db:migrate
 # The migration will create all necessary tables
 ```
 
-### 4. Start Development Servers
+#### 4. Configure Environment Variables
+
+Copy the example environment files and update them:
+
+```bash
+# Backend
+cp packages/backend/.env.example packages/backend/.env
+
+# Frontend
+cp packages/frontend/.env.example packages/frontend/.env
+```
+
+#### 5. Start Development Servers
 
 ```bash
 # Start both frontend and backend concurrently
@@ -77,7 +171,7 @@ npm run dev:backend   # Backend on http://localhost:5001
 npm run dev:frontend  # Frontend on http://localhost:5173
 ```
 
-### 5. Open the Application
+#### 6. Open the Application
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:5001/api
@@ -237,7 +331,45 @@ VITE_API_URL=http://localhost:5001/api
 
 ## Troubleshooting
 
+### Docker Issues
+
+#### Container Won't Start
+```bash
+# View container logs
+docker-compose logs app
+
+# Rebuild containers from scratch
+docker-compose down
+docker-compose up --build
+
+# Remove all volumes and start fresh
+docker-compose down -v
+docker-compose up --build
+```
+
+#### Can't Access Frontend
+```bash
+# Ensure Vite is binding to 0.0.0.0 (not just localhost)
+# Check vite.config.ts has: server: { host: '0.0.0.0' }
+
+# Restart the app container
+docker-compose restart app
+```
+
+#### Port Already in Use
+```bash
+# Check what's using the ports
+lsof -ti:5001 | xargs kill -9  # Backend
+lsof -ti:5173 | xargs kill -9  # Frontend
+lsof -ti:5432 | xargs kill -9  # PostgreSQL
+
+# Or stop all Docker containers
+docker-compose down
+```
+
 ### Database Connection Issues
+
+#### Docker Environment
 ```bash
 # Check if PostgreSQL is running
 docker-compose ps
@@ -249,16 +381,34 @@ docker-compose restart postgres
 docker-compose logs postgres
 ```
 
-### Port Already in Use
+#### Local Environment
 ```bash
-# Backend (port 5000)
-lsof -ti:5000 | xargs kill -9
+# Check if PostgreSQL container is running
+docker-compose ps postgres
 
-# Frontend (port 5173)
-lsof -ti:5173 | xargs kill -9
+# Restart PostgreSQL
+docker-compose restart postgres
+
+# Verify connection string in packages/backend/.env
+# Should be: postgresql://gutenberg:gutenberg_dev_password@localhost:5432/gutenberg
 ```
 
 ### Prisma Issues
+
+#### In Docker
+```bash
+# Regenerate Prisma client
+docker-compose exec app npm run db:generate
+
+# Run migrations
+docker-compose exec app npm run db:migrate
+
+# Reset database (⚠️ deletes all data)
+docker-compose down -v
+docker-compose up --build
+```
+
+#### Local Development
 ```bash
 # Regenerate Prisma client
 npm run db:generate
@@ -266,6 +416,15 @@ npm run db:generate
 # Reset database (⚠️ deletes all data)
 cd packages/backend
 npx prisma migrate reset
+```
+
+### OpenSSL/Prisma Engine Issues in Docker
+If you see Prisma OpenSSL warnings in the logs, the Dockerfile already includes the necessary OpenSSL libraries. If issues persist:
+
+```bash
+# Rebuild with no cache
+docker-compose build --no-cache app
+docker-compose up
 ```
 
 ## License
