@@ -5,7 +5,7 @@ import { AppError } from '../middleware/errorHandler';
 export class AnnotationsController {
   async createAnnotation(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
       const data: CreateAnnotationDto = req.body;
 
       // Validate required fields
@@ -23,7 +23,7 @@ export class AnnotationsController {
 
   async getAnnotations(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
       const { bookId } = req.query;
 
       if (bookId) {
@@ -45,7 +45,7 @@ export class AnnotationsController {
 
   async getAnnotationById(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
       const { id } = req.params;
 
       const annotation = await annotationService.getAnnotationById(userId, id);
@@ -57,7 +57,7 @@ export class AnnotationsController {
 
   async updateAnnotation(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
       const { id } = req.params;
       const data: UpdateAnnotationDto = req.body;
 
@@ -70,7 +70,7 @@ export class AnnotationsController {
 
   async deleteAnnotation(req: Request, res: Response, next: NextFunction) {
     try {
-      const userId = req.user!.id;
+      const userId = req.user!.userId;
       const { id } = req.params;
 
       await annotationService.deleteAnnotation(userId, id);
