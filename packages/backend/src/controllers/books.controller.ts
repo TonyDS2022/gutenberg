@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { gutenbergService } from '../services/gutenberg.service';
+import { assetService } from '../services/asset.service';
 
 export class BooksController {
   async searchBooks(req: Request, res: Response, next: NextFunction) {
@@ -49,6 +50,38 @@ export class BooksController {
       const content = await gutenbergService.getBookContent(bookId, format);
 
       res.json(content);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getBookAsset(req: Request, res: Response, next: NextFunction) {
+    try {
+      const bookId = parseInt(req.params.id);
+      const filename = req.params.filename;
+
+      if (isNaN(bookId)) {
+        return res.status(400).json({ error: 'Invalid book ID' });
+      }
+
+      if (!filename) {
+        return res.status(400).json({ error: 'Missing filename' });
+      }
+
+      const asset = await assetService.getAsset(bookId, filename);
+
+      if (!asset) {
+        return res.status(404).json({ error: 'Asset not found' });
+      }
+
+      // Set caching headers
+      res.set({
+        'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
+        'Content-Type': asset.mimeType,
+        'Content-Length': asset.data.length,
+      });
+
+      res.send(asset.data);
     } catch (error) {
       next(error);
     }

@@ -50,10 +50,31 @@ model Book {
   annotations   Annotation[]
   bookmarks     Bookmark[]
   readingSessions ReadingSession[]
+  assets        BookAsset[]
 
   @@map("books")
   @@index([title])
   @@index([languages])
+}
+
+model BookAsset {
+  id            String          @id @default(uuid())
+  bookId        Int
+  filename      String          // Unique filename for this asset
+  originalUrl   String          // Original URL where asset was fetched from
+  mimeType      String          // e.g., 'image/jpeg', 'image/png'
+  sizeBytes     Int?            // Size in bytes
+  data          Bytes?          @db.ByteA  // Binary data (for small assets)
+  localPath     String?         // Path to file on disk (for large assets)
+  altText       String?         // Original alt text from HTML
+  createdAt     DateTime        @default(now())
+
+  // Relations
+  book          Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@map("book_assets")
+  @@unique([bookId, filename])
+  @@index([bookId])
 }
 
 model Annotation {
