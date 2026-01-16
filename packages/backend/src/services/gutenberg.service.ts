@@ -1,8 +1,18 @@
 import axios from 'axios';
+import dns from 'dns';
+import http from 'http';
+import https from 'https';
 import { env } from '../config/env';
 import { prisma } from '../models';
 import { AppError } from '../middleware/errorHandler';
 import type { BookSearchParams, BookSearchResult, Book, BookContent } from '@gutenberg-reader/shared';
+
+// Force IPv4 for DNS resolution (fixes timeout issues in Docker containers)
+dns.setDefaultResultOrder('ipv4first');
+
+// Create HTTP agents that force IPv4
+const httpAgent = new http.Agent({ family: 4 });
+const httpsAgent = new https.Agent({ family: 4 });
 
 interface GutendexBook {
   id: number;
@@ -133,11 +143,13 @@ export class GutenbergService {
           book.formats['text/html'] ||
           book.formats['text/html; charset=utf-8'] ||
           book.formats['text/plain; charset=utf-8'] ||
+          book.formats['text/plain; charset=us-ascii'] ||
           book.formats['text/plain'];
       } else {
         // Prefer plain text format
         contentUrl =
           book.formats['text/plain; charset=utf-8'] ||
+          book.formats['text/plain; charset=us-ascii'] ||
           book.formats['text/plain'] ||
           book.formats['text/html; charset=utf-8'] ||
           book.formats['text/html'];
@@ -151,6 +163,12 @@ export class GutenbergService {
       const response = await axios.get<string>(contentUrl, {
         responseType: 'text',
         timeout: 30000, // 30 second timeout for large books
+        maxRedirects: 10, // Follow redirects
+        httpAgent,  // Force IPv4 (fixes Docker networking issues)
+        httpsAgent, // Force IPv4 for HTTPS
+        headers: {
+          'User-Agent': 'Gutenberg-Reader/1.0 (educational project)',
+        },
       });
 
       const content = response.data;
@@ -181,6 +199,18 @@ export class GutenbergService {
       if (error instanceof AppError) {
         throw error;
       }
+
+      // Handle specific error types
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        console.error('Timeout fetching book content:', error.message);
+        throw new AppError(504, 'Content fetch timed out. The external server may be slow or unreachable. Please try again later.');
+      }
+
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        console.error('Network error fetching book content:', error.message);
+        throw new AppError(502, 'Unable to reach external content server. Please check network connectivity.');
+      }
+
       console.error('Error fetching book content:', error);
       throw new AppError(500, 'Failed to fetch book content');
     }
