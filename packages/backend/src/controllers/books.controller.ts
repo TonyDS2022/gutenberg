@@ -74,8 +74,9 @@ export class BooksController {
         return res.status(404).json({ error: 'Asset not found' });
       }
 
-      // Set caching headers
+      // Set caching headers and CORS for cross-origin access
       res.set({
+        'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
         'Content-Type': asset.mimeType,
         'Content-Length': asset.data.length,
