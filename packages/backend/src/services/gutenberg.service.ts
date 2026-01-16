@@ -11,9 +11,9 @@ import type { BookSearchParams, BookSearchResult, Book, BookContent } from '@gut
 // Force IPv4 for DNS resolution (fixes timeout issues in Docker containers)
 dns.setDefaultResultOrder('ipv4first');
 
-// Create HTTP agents that force IPv4
-const httpAgent = new http.Agent({ family: 4 });
-const httpsAgent = new https.Agent({ family: 4 });
+// HTTP agents that force IPv4 (fixes timeout issues in Docker containers)
+export const httpAgent = new http.Agent({ family: 4 });
+export const httpsAgent = new https.Agent({ family: 4 });
 
 interface GutendexBook {
   id: number;
@@ -108,49 +108,10 @@ export class GutenbergService {
 
   async getBookContent(bookId: number, format: 'text' | 'html' = 'text'): Promise<BookContent> {
     try {
-      // Check if content is already cached in database
-      const cachedBook = await prisma.book.findUnique({
-        where: { id: bookId },
-        select: {
-          content: true,
-          contentFormat: true,
-          contentLength: true,
-        },
-      });
-
-      // Return cached content if available and format matches
-      if (cachedBook?.content && cachedBook?.contentFormat) {
-        // If HTML is requested but only text is cached, still return it (better than nothing)
-        if (format === 'html' && cachedBook.contentFormat === 'text') {
-          console.log(`Returning cached text content for book ${bookId} (HTML requested but not cached)`);
-          return {
-            bookId,
-            content: cachedBook.content,
-            format: 'text' as const,
-            length: cachedBook.contentLength || cachedBook.content.length,
-          };
-        }
-        // Return cached content if format matches
-        if (cachedBook.contentFormat === format) {
-          console.log(`Returning cached content for book ${bookId}`);
-          return {
-            bookId,
-            content: cachedBook.content,
-            format: cachedBook.contentFormat as 'text' | 'html',
-            length: cachedBook.contentLength || cachedBook.content.length,
-          };
-        }
-        // If formats don't match, we'll fetch fresh content below
-        console.log(`Cached format (${cachedBook.contentFormat}) differs from requested (${format}), fetching fresh content`);
-      }
-
-      // Content not cached, fetch from Project Gutenberg
-      console.log(`Fetching content from Project Gutenberg for book ${bookId}`);
-
-      // Get book to access formats
+      // Get book to access formats (needed for both cached and fresh content)
       const book = await this.getBookById(bookId);
 
-      // Determine which URL to fetch from
+      // Determine which URL to use
       let contentUrl: string | null = null;
 
       if (format === 'html') {
@@ -175,6 +136,74 @@ export class GutenbergService {
         throw new AppError(404, 'No suitable text format available for this book');
       }
 
+      // Determine actual format from URL
+      const urlPath = contentUrl.split('/').pop() || '';
+      const actualFormat =
+        urlPath.endsWith('.html') ||
+        urlPath.endsWith('.htm') ||
+        urlPath.includes('.html.') ||
+        urlPath.includes('.htm.') ||
+        (contentUrl.includes('/ebooks/') && !contentUrl.includes('.txt.') && !contentUrl.includes('.epub'))
+          ? 'html'
+          : 'text';
+
+      // Derive correct base URL for image resolution
+      // Gutenberg's .html.images format stores images in /cache/epub/{id}/images/
+      let imageBaseUrl = contentUrl;
+      if (contentUrl.includes('.html.images')) {
+        const match = contentUrl.match(/\/(\d+)\.html\.images$/);
+        if (match) {
+          imageBaseUrl = `https://www.gutenberg.org/cache/epub/${match[1]}/`;
+        }
+      } else if (contentUrl.includes('/ebooks/')) {
+        imageBaseUrl = contentUrl.substring(0, contentUrl.lastIndexOf('/') + 1);
+      }
+
+      // Check if content is already cached in database
+      const cachedBook = await prisma.book.findUnique({
+        where: { id: bookId },
+        select: {
+          content: true,
+          contentFormat: true,
+          contentLength: true,
+        },
+      });
+
+      // Return cached content if available and format matches
+      if (cachedBook?.content && cachedBook?.contentFormat && cachedBook.contentFormat === actualFormat) {
+        console.log(`Returning cached content for book ${bookId}`);
+        let content = cachedBook.content;
+
+        // Always process HTML content to ensure images are cached and URLs are rewritten
+        if (actualFormat === 'html') {
+          const result = await assetService.processContent(bookId, content, imageBaseUrl);
+          content = result.content;
+
+          // Update cache with processed content if different
+          if (content !== cachedBook.content) {
+            await prisma.book.update({
+              where: { id: bookId },
+              data: {
+                content,
+                contentLength: content.length,
+                contentCachedAt: new Date(),
+              },
+            });
+            console.log(`Updated cached content for book ${bookId} with processed images`);
+          }
+        }
+
+        return {
+          bookId,
+          content,
+          format: actualFormat,
+          length: cachedBook.contentLength || cachedBook.content.length,
+        };
+      }
+
+      // Content not cached, fetch from Project Gutenberg
+      console.log(`Fetching content from Project Gutenberg for book ${bookId}`);
+
       // Fetch content from Project Gutenberg
       const response = await axios.get<string>(contentUrl, {
         responseType: 'text',
@@ -189,23 +218,10 @@ export class GutenbergService {
 
       let content = response.data;
 
-      // Determine actual format from Content-Type or URL
-      // Check for .html at end of path (not just substring like .txt.utf-8)
-      // Handle Gutenberg's .html.images convention
-      const urlPath = contentUrl.split('/').pop() || '';
-      const actualFormat =
-        urlPath.endsWith('.html') ||
-        urlPath.endsWith('.htm') ||
-        urlPath.includes('.html.') ||
-        urlPath.includes('.htm.') ||
-        (contentUrl.includes('/ebooks/') && !contentUrl.includes('.txt.') && !contentUrl.includes('.epub'))
-          ? 'html'
-          : 'text';
-
       // Process HTML content to cache images locally
       let assetsCached = 0;
       if (actualFormat === 'html') {
-        const result = await assetService.processContent(bookId, content, contentUrl);
+        const result = await assetService.processContent(bookId, content, imageBaseUrl);
         content = result.content;
         assetsCached = result.assets.length;
       }
