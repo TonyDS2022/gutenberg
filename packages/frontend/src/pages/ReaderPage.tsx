@@ -73,7 +73,7 @@ export const ReaderPage = () => {
         // Load book metadata and content in parallel
         const [bookData, contentData] = await Promise.all([
           booksApi.getById(parseInt(bookId)),
-          booksApi.getContent(parseInt(bookId), 'text'),
+          booksApi.getContent(parseInt(bookId), 'html'),
         ]);
 
         setBook(bookData);
