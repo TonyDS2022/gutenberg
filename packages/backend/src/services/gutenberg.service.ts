@@ -5,6 +5,7 @@ import https from 'https';
 import { env } from '../config/env';
 import { prisma } from '../models';
 import { AppError } from '../middleware/errorHandler';
+import { assetService } from './asset.service';
 import type { BookSearchParams, BookSearchResult, Book, BookContent } from '@gutenberg-reader/shared';
 
 // Force IPv4 for DNS resolution (fixes timeout issues in Docker containers)
@@ -117,15 +118,30 @@ export class GutenbergService {
         },
       });
 
-      // Return cached content if available
+      // Return cached content if available and format matches
       if (cachedBook?.content && cachedBook?.contentFormat) {
-        console.log(`Returning cached content for book ${bookId}`);
-        return {
-          bookId,
-          content: cachedBook.content,
-          format: cachedBook.contentFormat as 'text' | 'html',
-          length: cachedBook.contentLength || cachedBook.content.length,
-        };
+        // If HTML is requested but only text is cached, still return it (better than nothing)
+        if (format === 'html' && cachedBook.contentFormat === 'text') {
+          console.log(`Returning cached text content for book ${bookId} (HTML requested but not cached)`);
+          return {
+            bookId,
+            content: cachedBook.content,
+            format: 'text' as const,
+            length: cachedBook.contentLength || cachedBook.content.length,
+          };
+        }
+        // Return cached content if format matches
+        if (cachedBook.contentFormat === format) {
+          console.log(`Returning cached content for book ${bookId}`);
+          return {
+            bookId,
+            content: cachedBook.content,
+            format: cachedBook.contentFormat as 'text' | 'html',
+            length: cachedBook.contentLength || cachedBook.content.length,
+          };
+        }
+        // If formats don't match, we'll fetch fresh content below
+        console.log(`Cached format (${cachedBook.contentFormat}) differs from requested (${format}), fetching fresh content`);
       }
 
       // Content not cached, fetch from Project Gutenberg
@@ -171,10 +187,28 @@ export class GutenbergService {
         },
       });
 
-      const content = response.data;
+      let content = response.data;
 
       // Determine actual format from Content-Type or URL
-      const actualFormat = contentUrl.includes('.html') ? 'html' : 'text';
+      // Check for .html at end of path (not just substring like .txt.utf-8)
+      // Handle Gutenberg's .html.images convention
+      const urlPath = contentUrl.split('/').pop() || '';
+      const actualFormat =
+        urlPath.endsWith('.html') ||
+        urlPath.endsWith('.htm') ||
+        urlPath.includes('.html.') ||
+        urlPath.includes('.htm.') ||
+        (contentUrl.includes('/ebooks/') && !contentUrl.includes('.txt.') && !contentUrl.includes('.epub'))
+          ? 'html'
+          : 'text';
+
+      // Process HTML content to cache images locally
+      let assetsCached = 0;
+      if (actualFormat === 'html') {
+        const result = await assetService.processContent(bookId, content, contentUrl);
+        content = result.content;
+        assetsCached = result.assets.length;
+      }
 
       // Cache the content in database for future use
       await prisma.book.update({
@@ -187,7 +221,7 @@ export class GutenbergService {
         },
       });
 
-      console.log(`Cached content for book ${bookId} (${content.length} characters)`);
+      console.log(`Cached content for book ${bookId} (${content.length} characters, ${assetsCached} assets)`);
 
       return {
         bookId,
@@ -227,10 +261,11 @@ export class GutenbergService {
     }
 
     // Cache new book
-    return this.cacheBook(gutendexBook);
+    const book = await this.cacheBook(gutendexBook);
+    return this.formatBook(book);
   }
 
-  private async cacheBook(gutendexBook: GutendexBook): Promise<Book> {
+  private async cacheBook(gutendexBook: GutendexBook) {
     // Extract cover image URL if available
     const coverImage =
       gutendexBook.formats['image/jpeg'] ||
@@ -247,11 +282,11 @@ export class GutenbergService {
         formats: gutendexBook.formats,
         downloadCount: gutendexBook.download_count,
         coverImage,
-        metadata: gutendexBook,
+        metadata: gutendexBook as any,
       },
     });
 
-    return this.formatBook(book);
+    return book;
   }
 
   private formatBook(book: any): Book {

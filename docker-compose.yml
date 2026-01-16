@@ -27,6 +27,10 @@ services:
       dockerfile: Dockerfile.dev
     container_name: gutenberg-app
     restart: unless-stopped
+    # Prefer IPv4 for external network calls (fixes timeout issues with some servers)
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     environment:
       # Node environment
       NODE_ENV: ${NODE_ENV:-development}
